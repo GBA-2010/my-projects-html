@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Гид по Санья</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --warning: #f9ab00;
+            --bg-color: #ffffff;
+            --surface: #ffffff;
+            --text-main: #202124;
+            --text-sub: #5f6368;
+            --border: #dadce0;
+            --modal-bg: rgba(0, 0, 0, 0.85);
+            --shadow-float: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        body.dark-mode {
+            --bg-color: #202124;
+            --surface: #2d2e30;
+            --text-main: #e8eaed;
+            --text-sub: #9aa0a6;
+            --border: #3c4043;
+            --primary: #8ab4f8; 
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg-color); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* HEADER */
+        header {
+            height: 60px; background: var(--surface); padding: 0 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10000; position: relative;
+        }
+        .header-title { font-size: 1.2rem; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        .header-title i { color: var(--primary); }
+
+        /* MAIN & MAP */
+        main { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+        .tab-content { display: none; flex: 1; width: 100%; height: 100%; position: relative; }
+        .tab-content.active { display: flex; flex-direction: column; }
+        
+        #map-container { flex: 1; position: relative; width: 100%; height: 100%; }
+        #map { width: 100%; height: 100%; z-index: 1; }
+
+        /* --- UI ELEMENTS --- */
+
+        /* 1. Top Filters */
+        .top-panel {
+            position: absolute; top: 10px; left: 0; right: 0;
+            z-index: 9000; display: flex; gap: 8px; padding: 5px 12px;
+            overflow-x: auto; scrollbar-width: none; pointer-events: none;
+        }
+        .filter-chip {
+            pointer-events: auto; background: var(--surface); padding: 8px 16px;
+            border-radius: 20px; font-size: 0.9rem; font-weight: 500;
+            white-space: nowrap; color: var(--text-sub);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); border: 1px solid transparent;
+            display: flex; align-items: center; gap: 6px; cursor: pointer;
+        }
+        .filter-chip.active { background: #e8f0fe; color: #1a73e8; font-weight: 600; }
+        body.dark-mode .filter-chip.active { background: #3c4043; color: #8ab4f8; }
+
+        /* 2. Controls (List Toggle & Zoom) */
+        .fab-toggle {
+            position: absolute; bottom: 100px; right: 20px;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: #1a73e8; color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 9000; border: none; font-size: 1.4rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* 3. List Overlay */
+        .list-view-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); z-index: 8000; display: none;
+            padding: 60px 0 90px 0; overflow-y: auto;
+        }
+        .list-view-overlay.visible { display: block; }
+        .list-item { padding: 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; cursor: pointer; }
+
+        /* 4. Bottom Drawer */
+        .drawer {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: var(--surface);
+            border-radius: 20px 20px 0 0; padding: 20px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+            transform: translateY(120%); transition: transform 0.3s ease;
+            z-index: 9500;
+        }
+        .drawer.open { transform: translateY(0); }
+        .drawer-handle { width: 40px; height: 4px; background: #ddd; margin: 0 auto 15px; border-radius: 2px; }
+        .location-title { font-size: 1.4rem; font-weight: 500; margin-bottom: 4px; }
+        .location-cn { font-size: 1.1rem; color: var(--text-sub); margin-bottom: 20px; }
+        .drawer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .btn { padding: 12px; border-radius: 24px; border: none; font-weight: 600; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-taxi { background: #f9ab00; color: #202124; }
+        .btn-route { background: #1a73e8; color: white; }
+
+        /* 5. Route Planning Panel */
+        .route-panel {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: var(--surface); z-index: 9600;
+            border-radius: 20px 20px 0 0; padding: 0;
+            transform: translateY(120%); transition: transform 0.3s ease;
+            display: flex; flex-direction: column;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+        }
+        .route-panel.open { transform: translateY(0); }
+        
+        .route-header { padding: 15px 20px 0; display: flex; justify-content: space-between; align-items: center; }
+        .route-close { font-size: 1.5rem; color: var(--text-sub); cursor: pointer; padding: 5px; }
+
+        .route-inputs { padding: 15px 20px; display: flex; flex-direction: column; gap: 10px; }
+        .route-input-row { display: flex; align-items: center; gap: 10px; }
+        .dot-start { width: 12px; height: 12px; border: 2px solid #555; border-radius: 50%; }
+        .dot-end { width: 12px; height: 12px; background: #ea4335; border-radius: 50%; }
+        .route-input-box {
+            flex: 1; padding: 12px; background: #f1f3f4; border-radius: 8px;
+            font-size: 0.95rem; color: #202124; border: 1px solid transparent;
+        }
+        body.dark-mode .route-input-box { background: #3c4043; color: white; }
+
+        .route-modes {
+            display: flex; justify-content: space-around; border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border); padding: 15px 0; margin-top: 5px;
+        }
+        .mode-item {
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+            color: var(--text-sub); cursor: pointer; width: 33%;
+        }
+        .mode-item.active { color: #1a73e8; }
+        .mode-icon { font-size: 1.4rem; padding: 8px 20px; border-radius: 20px; transition: 0.2s; }
+        .mode-item.active .mode-icon { background: #e8f0fe; }
+        .mode-time { font-size: 0.9rem; font-weight: bold; }
+        
+        .route-actions { padding: 15px 20px 30px; }
+
+        /* Navigation Active UI */
+        .nav-active-panel {
+            position: absolute; top: 70px; left: 10px; right: 10px;
+            background: #1a73e8; color: white;
+            padding: 15px; border-radius: 12px;
+            z-index: 9700; display: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: none; justify-content: space-between; align-items: center;
+        }
+        .nav-active-panel.visible { display: flex; }
+        .nav-info { font-weight: bold; font-size: 1.1rem; }
+        .btn-stop { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+
+        /* Leaflet Routing Machine Customization */
+        .leaflet-routing-container {
+            display: none !important; /* Hide default sidebar */
+        }
+
+        /* PINS */
+        .pin-marker {
+            width: 32px; height: 32px; border-radius: 50% 50% 50% 0;
+            background: #ea4335; position: absolute; transform: rotate(-45deg);
+            left: 50%; top: 50%; margin: -16px 0 0 -16px;
+            box-shadow: -2px 3px 5px rgba(0,0,0,0.3);
+            display: flex; justify-content: center; align-items: center;
+        }
+        .pin-marker::after { content: ''; width: 18px; height: 18px; background: white; border-radius: 50%; position: absolute; }
+        .pin-icon { transform: rotate(45deg); z-index: 2; font-size: 14px; position: relative; }
+        
+        .pin-hotel { background: #1a73e8; } .pin-hotel .pin-icon { color: #1a73e8; }
+        .pin-food { background: #fa7b17; } .pin-food .pin-icon { color: #fa7b17; }
+        .pin-attraction { background: #34a853; } .pin-attraction .pin-icon { color: #34a853; }
+        .pin-airport { background: #a142f4; } .pin-airport .pin-icon { color: #a142f4; }
+
+        /* BOTTOM NAV */
+        .bottom-nav {
+            height: 60px; background: var(--surface); border-top: 1px solid var(--border);
+            display: flex; justify-content: space-around; align-items: center;
+            z-index: 10000; position: relative;
+        }
+        .nav-item { background: none; border: none; display: flex; flex-direction: column; align-items: center; color: var(--text-sub); font-size: 0.75rem; gap: 2px; }
+        .nav-item i { font-size: 1.4rem; padding: 2px 16px; border-radius: 16px; }
+        .nav-item.active { color: var(--primary); }
+        .nav-item.active i { background: #e8f0fe; color: var(--primary); }
+
+        /* MODALS */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 20000;
+            display: none; justify-content: center; align-items: center; flex-direction: column; padding: 20px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-content-text { color: #f9ab00; font-size: 2.5rem; font-weight: 700; margin-bottom: 30px; text-align: center; }
+
+        /* SETTINGS */
+        .modal-box { background: var(--surface); padding: 20px; border-radius: 16px; width: 90%; max-width: 350px; }
+        .radio-option { padding: 12px; display: flex; justify-content: space-between; border-radius: 8px; cursor: pointer; }
+        .radio-option.selected { background: #e8f0fe; color: var(--primary); font-weight: bold; }
+
+        /* Other Tabs */
+        .food-grid { padding: 15px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .food-card { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+        .phrases-list { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .phrase-card { background: var(--surface); padding: 15px; border-radius: 12px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-title"><i class="fa-solid fa-location-dot"></i> Гид по Санья</div>
+        <div class="header-actions"><i class="fa-solid fa-gear" onclick="openSettings()"></i></div>
+    </header>
+
+    <!-- MAP TAB -->
+    <main id="tab-map" class="tab-content active">
+        <div id="map-container">
+            <!-- 1. Filters (Top) -->
+            <div class="top-panel">
+                <div class="filter-chip active" onclick="filterMap('all')">Все</div>
+                <div class="filter-chip" onclick="filterMap('hotel')"><i class="fa-solid fa-hotel"></i> Отели</div>
+                <div class="filter-chip" onclick="filterMap('food')"><i class="fa-solid fa-utensils"></i> Еда</div>
+                <div class="filter-chip" onclick="filterMap('beach')"><i class="fa-solid fa-umbrella-beach"></i> Пляжи</div>
+                <div class="filter-chip" onclick="filterMap('attraction')"><i class="fa-solid fa-camera"></i> Места</div>
+                <div class="filter-chip" onclick="filterMap('shopping')"><i class="fa-solid fa-bag-shopping"></i> ТЦ</div>
+            </div>
+
+            <!-- Leaflet Map -->
+            <div id="map"></div>
+
+            <!-- Navigation Active Panel -->
+            <div id="nav-active-panel" class="nav-active-panel">
+                <div class="nav-info">Маршрут построен</div>
+                <button class="btn-stop" onclick="stopNavigation()">Завершить</button>
+            </div>
+
+            <!-- 2. List Toggle Button (Visible!) -->
+            <button class="fab-toggle" onclick="toggleListView()">
+                <i class="fa-solid fa-list" id="toggle-icon"></i>
+            </button>
+
+            <!-- 3. List Overlay -->
+            <div class="list-view-overlay" id="list-view"></div>
+
+            <!-- 4. Location Drawer -->
+            <div class="drawer" id="map-drawer">
+                <div class="drawer-handle"></div>
+                <div class="location-title" id="drawer-title">Название</div>
+                <div class="location-cn" id="drawer-cn">CN Name</div>
+                <div class="drawer-actions">
+                    <button class="btn btn-taxi" onclick="showTaxiCard()">
+                        <i class="fa-solid fa-taxi"></i> Таксисту
+                    </button>
+                    <button class="btn btn-route" onclick="openRoutePanel()">
+                        <i class="fa-solid fa-diamond-turn-right"></i> Маршрут
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. Route Planning Panel (Google Maps Style) -->
+            <div class="route-panel" id="route-panel">
+                <div class="route-header">
+                    <div style="font-weight:bold; font-size:1.1rem;">Построение маршрута</div>
+                    <div class="route-close" onclick="closeRoutePanel()"><i class="fa-solid fa-xmark"></i></div>
+                </div>
+                
+                <div class="route-inputs">
+                    <div class="route-input-row">
+                        <div class="dot-start"></div>
+                        <div class="route-input-box">Мое местоположение</div>
+                    </div>
+                    <div style="margin-left:5px; height:10px; border-left:2px dotted #ccc;"></div>
+                    <div class="route-input-row">
+                        <div class="dot-end"></div>
+                        <div class="route-input-box" id="route-dest-name">Куда едем?</div>
+                    </div>
+                </div>
+
+                <div class="route-modes">
+                    <div class="mode-item active" onclick="selectMode('driving')">
+                        <div class="mode-icon"><i class="fa-solid fa-car"></i></div>
+                        <div class="mode-time" id="time-driving">15 мин</div>
+                    </div>
+                    <div class="mode-item" onclick="selectMode('transit')">
+                        <div class="mode-icon"><i class="fa-solid fa-bus"></i></div>
+                        <div class="mode-time" id="time-transit">40 мин</div>
+                    </div>
+                    <div class="mode-item" onclick="selectMode('walking')">
+                        <div class="mode-icon"><i class="fa-solid fa-person-walking"></i></div>
+                        <div class="mode-time" id="time-walking">1 ч 20</div>
+                    </div>
+                </div>
+
+                <div class="route-actions">
+                    <button class="btn btn-route" style="width:100%; font-size:1.1rem; padding:15px;" onclick="startNavigation()">
+                        <i class="fa-solid fa-location-arrow"></i> В путь (Начать)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- FOOD TAB -->
+    <main id="tab-food" class="tab-content">
+        <div class="food-grid" id="food-container"></div>
+    </main>
+
+    <!-- PHRASES TAB -->
+    <main id="tab-phrases" class="tab-content">
+        <div class="phrases-list" id="phrases-container"></div>
+    </main>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+        <button class="nav-item active" onclick="switchTab('map')">
+            <i class="fa-solid fa-map-location-dot"></i> <span>Карта</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('food')">
+            <i class="fa-solid fa-utensils"></i> <span>Еда</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('phrases')">
+            <i class="fa-solid fa-comment-dots"></i> <span>Фразы</span>
+        </button>
+    </nav>
+
+    <!-- Fullscreen Modal -->
+    <div class="modal-overlay" id="text-modal">
+        <i class="fa-solid fa-xmark" style="position:absolute; top:30px; right:30px; font-size:2rem; color:white; cursor:pointer;" onclick="closeModal('text-modal')"></i>
+        <div style="color:#ccc; margin-bottom:20px; font-size:1.1rem;" id="modal-sub"></div>
+        <div class="modal-content-text" id="modal-content"></div>
+        <button class="btn btn-route" id="modal-play-btn" style="width:70%; font-size:1.2rem; background:white; color:#202124;">
+            <i class="fa-solid fa-volume-high"></i> Сказать
+        </button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-box">
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                <h3 style="margin:0;">Настройки</h3>
+                <i class="fa-solid fa-xmark" onclick="closeModal('settings-modal')" style="font-size:1.5rem;"></i>
+            </div>
+            <div class="radio-option selected" id="theme-light" onclick="setTheme('light')"><span>Светлая</span> <i class="fa-solid fa-check"></i></div>
+            <div class="radio-option" id="theme-dark" onclick="setTheme('dark')"><span>Темная</span> <i class="fa-solid fa-check" style="display:none;"></i></div>
+        </div>
+    </div>
+
+    <script>
+        // DATA
+        const locations = [
+            { id: 99, name: 'Аэропорт Феникс', cn: '三亚凤凰国际机场', lat: 18.3029, lng: 109.4123, type: 'airport' },
+            { id: 101, name: 'Atlantis Sanya', cn: '三亚亚特兰蒂斯', lat: 18.3308, lng: 109.7428, type: 'hotel' },
+            { id: 102, name: 'MGM Grand', cn: '三亚美高梅度假酒店', lat: 18.2165, lng: 109.6465, type: 'hotel' },
+            { id: 103, name: 'Ritz-Carlton', cn: '金茂三亚亚龙湾丽思卡尔顿酒店', lat: 18.2135, lng: 109.6438, type: 'hotel' },
+            { id: 104, name: 'Pullman', cn: '三亚湾普尔曼度假酒店', lat: 18.2835, lng: 109.4895, type: 'hotel' },
+            { id: 105, name: 'Sheraton Sanya', cn: '三亚喜来登度假酒店', lat: 18.2120, lng: 109.6420, type: 'hotel' },
+            { id: 106, name: 'Mangrove Tree', cn: '三亚湾红树林度假世界', lat: 18.2690, lng: 109.5085, type: 'hotel' },
+            { id: 107, name: 'Edition Sanya', cn: '三亚艾迪逊酒店', lat: 18.3450, lng: 109.7350, type: 'hotel' },
+            { id: 108, name: 'Shangri-La', cn: '三亚香格里拉', lat: 18.3465, lng: 109.7380, type: 'hotel' },
+            { id: 109, name: 'Grand Hyatt', cn: '三亚海棠湾君悦酒店', lat: 18.3430, lng: 109.7400, type: 'hotel' },
+            { id: 110, name: 'InterContinental', cn: '三亚半山半岛洲际度假酒店', lat: 18.2130, lng: 109.5050, type: 'hotel' },
+            { id: 111, name: 'Palm Beach Resort', cn: '三亚棕榈滩度假酒店', lat: 18.2945, lng: 109.4320, type: 'hotel' },
+            { id: 1, name: 'Парк "Олень"', cn: '鹿回头公园', lat: 18.2323, lng: 109.5034, type: 'attraction' },
+            { id: 3, name: 'Храм Наньшань', cn: '南山寺', lat: 18.3036, lng: 109.2078, type: 'attraction' },
+            { id: 4, name: 'Край Света', cn: '天涯海角', lat: 18.2954, lng: 109.3475, type: 'attraction' },
+            { id: 2, name: 'Пляж Дадунхай', cn: '大东海', lat: 18.2248, lng: 109.5222, type: 'beach' },
+            { id: 6, name: 'Ялонг Бэй', cn: '亚龙湾', lat: 18.2198, lng: 109.6534, type: 'beach' },
+            { id: 14, name: 'CDF Duty Free', cn: '三亚国际免税城', lat: 18.3491, lng: 109.7369, type: 'shopping' },
+            { id: 5, name: 'Ночной рынок', cn: '亿恒夜市', lat: 18.2612, lng: 109.5015, type: 'shopping' },
+            { id: 10, name: 'Первый Рынок', cn: '第一市场', lat: 18.2435, lng: 109.5082, type: 'shopping' }
+        ];
+
+        const foods = [
+            { name: 'Вэньчанская курица', cn: '文昌鸡', type: 'seafood', class: 'chicken' },
+            { name: 'Краб Хэ-лэ', cn: '和乐蟹', type: 'seafood', class: 'crab' },
+            { name: 'Кокосовый рис', cn: '椰子饭', type: 'snack', class: 'coconut' },
+            { name: 'Хайнаньская лапша', cn: '海南粉', type: 'snack', class: 'noodle' }
+        ];
+
+        const phrases = [
+            { en: 'Сколько стоит?', cn: '多少钱?', pinyin: 'Duōshǎo qián?' },
+            { en: 'Здравствуйте', cn: '你好', pinyin: 'Nǐ hǎo' },
+            { en: 'Спасибо', cn: '谢谢', pinyin: 'Xièxiè' },
+            { en: 'В отель', cn: '去酒店', pinyin: 'Qù jiǔdiàn' },
+            { en: 'Не острое', cn: '不要辣', pinyin: 'Bùyào là' }
+        ];
+
+        let map, markers = [], activeLocation = null, isListView = false, currentMode = 'driving';
+        let routingControl = null;
+
+        function speak(text) {
+            if (!window.speechSynthesis) return alert("Браузер не поддерживает TTS.");
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'zh-CN';
+            window.speechSynthesis.speak(u);
+        }
+
+        window.onload = function() {
+            if (typeof L !== 'undefined') initMap();
+            initFood(); initPhrases(); initListView();
+            if(map) map.on('click', () => {
+                document.getElementById('map-drawer').classList.remove('open');
+                closeRoutePanel();
+            });
+        };
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([18.2528, 109.5119], 11);
+            L.tileLayer('http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3']
+            }).addTo(map);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            renderMarkers(locations);
+        }
+
+        function getPinHtml(type) {
+            let c='pin-attraction', i='fa-location-dot';
+            if(type==='airport') {c='pin-airport'; i='fa-plane';}
+            if(type==='hotel') {c='pin-hotel'; i='fa-bed';}
+            if(type==='food') {c='pin-food'; i='fa-utensils';}
+            if(type==='beach') {c='pin-attraction'; i='fa-umbrella-beach';}
+            if(type==='shopping') {c='pin-food'; i='fa-bag-shopping';}
+            return `<div class="pin-marker ${c}"><i class="fa-solid ${i} pin-icon"></i></div>`;
+        }
+
+        function renderMarkers(data) {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            data.forEach(loc => {
+                const icon = L.divIcon({ className: '', html: getPinHtml(loc.type), iconSize:[32,32], iconAnchor:[16,32] });
+                const m = L.marker([loc.lat, loc.lng], { icon: icon }).addTo(map).on('click', () => openDrawer(loc));
+                markers.push(m);
+            });
+        }
+
+        function filterMap(type) {
+            document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            let f = type === 'all' ? locations : locations.filter(l => l.type === type);
+            renderMarkers(f);
+            updateListView(f);
+        }
+
+        function openDrawer(loc) {
+            activeLocation = loc;
+            document.getElementById('drawer-title').innerText = loc.name;
+            document.getElementById('drawer-cn').innerText = loc.cn;
+            document.getElementById('map-drawer').classList.add('open');
+            closeRoutePanel();
+            map.panTo([loc.lat, loc.lng]);
+        }
+
+        /* --- Route Logic --- */
+        function openRoutePanel() {
+            if(!activeLocation) return;
+            document.getElementById('map-drawer').classList.remove('open');
+            document.getElementById('route-dest-name').innerText = activeLocation.name;
+            document.getElementById('route-panel').classList.add('open');
+            
+            // Random time estimates for demo
+            const dist = Math.random() * 20 + 5;
+            document.getElementById('time-driving').innerText = Math.round(dist) + " мин";
+            document.getElementById('time-transit').innerText = Math.round(dist * 3) + " мин";
+            document.getElementById('time-walking').innerText = Math.round(dist * 12) + " мин";
+        }
+
+        function closeRoutePanel() {
+            document.getElementById('route-panel').classList.remove('open');
+            if(activeLocation) document.getElementById('map-drawer').classList.add('open');
+        }
+
+        function selectMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-item').forEach(m => m.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+        }
+
+        function startNavigation() {
+            if(!activeLocation) return;
+            closeRoutePanel();
+            document.getElementById('map-drawer').classList.remove('open');
+            
+            // Show Active Navigation UI
+            document.getElementById('nav-active-panel').classList.add('visible');
+
+            // Mock Start Location (e.g., Sanya Bay)
+            const startLat = 18.2667;
+            const startLng = 109.4667;
+
+            // Remove previous route
+            if(routingControl) {
+                map.removeControl(routingControl);
+            }
+
+            // Create Route using Leaflet Routing Machine
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(startLat, startLng),
+                    L.latLng(activeLocation.lat, activeLocation.lng)
+                ],
+                routeWhileDragging: false,
+                showAlternatives: false,
+                lineOptions: {
+                    styles: [{color: '#1a73e8', opacity: 0.8, weight: 6}]
+                },
+                createMarker: function() { return null; } // Hide default markers
+            }).addTo(map);
+        }
+
+        function stopNavigation() {
+            if(routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+            document.getElementById('nav-active-panel').classList.remove('visible');
+            if(activeLocation) openDrawer(activeLocation);
+        }
+
+        function initListView() { updateListView(locations); }
+
+        function updateListView(data) {
+            const container = document.getElementById('list-view');
+            container.innerHTML = "";
+            data.forEach(loc => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <div style="width:40px; height:40px; background:#f1f3f4; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:15px; color:#5f6368;">
+                        <i class="fa-solid fa-location-dot"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:500;">${loc.name}</div>
+                        <div style="font-size:0.9rem; color:var(--text-sub);">${loc.cn}</div>
+                    </div>
+                `;
+                item.onclick = () => {
+                    toggleListView();
+                    openDrawer(loc);
+                    map.setView([loc.lat, loc.lng], 15);
+                };
+                container.appendChild(item);
+            });
+        }
+
+        function toggleListView() {
+            const list = document.getElementById('list-view');
+            const icon = document.getElementById('toggle-icon');
+            isListView = !isListView;
+            if(isListView) {
+                list.classList.add('visible');
+                icon.className = 'fa-solid fa-map';
+            } else {
+                list.classList.remove('visible');
+                icon.className = 'fa-solid fa-list';
+            }
+        }
+
+        function showTaxiCard() {
+            if(!activeLocation) return;
+            const t = "请带我去 " + activeLocation.cn;
+            showModal(t, "Покажите таксисту:\n(Отвезите меня в " + activeLocation.name + ")", t);
+        }
+
+        function initFood() {
+            const c = document.getElementById('food-container');
+            foods.forEach(f => {
+                const el = document.createElement('div');
+                el.className = 'food-card';
+                el.innerHTML = `
+                    <div style="height:120px; background:#eee; display:flex; align-items:center; justify-content:center; font-size:2rem; color:#999;"><i class="fa-solid fa-bowl-food"></i></div>
+                    <div style="padding:15px;">
+                        <div style="font-weight:bold;">${f.name}</div>
+                        <div style="color:var(--primary); font-size:1.1rem; margin:5px 0;">${f.cn}</div>
+                        <button class="btn btn-route" style="width:100%; padding:8px; font-size:0.9rem;" onclick="speak('我想点这个 ${f.cn}')">Заказать</button>
+                    </div>`;
+                c.appendChild(el);
+            });
+        }
+
+        function initPhrases() {
+            const c = document.getElementById('phrases-container');
+            phrases.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'phrase-card';
+                el.innerHTML = `
+                    <div><div style="font-weight:500;">${p.en}</div><div style="font-size:0.9rem; color:var(--text-sub);">${p.pinyin}</div></div>
+                    <i class="fa-solid fa-volume-high" style="color:var(--primary); font-size:1.4rem; padding:10px;" onclick="speak('${p.cn}')"></i>`;
+                c.appendChild(el);
+            });
+        }
+
+        function switchTab(t) {
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const navs = document.querySelectorAll('.nav-item');
+            if(t==='map') navs[0].classList.add('active');
+            if(t==='food') navs[1].classList.add('active');
+            if(t==='phrases') navs[2].classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('tab-'+t).classList.add('active');
+            if(t==='map' && map) setTimeout(()=>map.invalidateSize(), 100);
+        }
+
+        function showModal(txt, sub, aud) {
+            document.getElementById('modal-content').innerText = txt;
+            document.getElementById('modal-sub').innerText = sub;
+            document.getElementById('text-modal').classList.add('open');
+            document.getElementById('modal-play-btn').onclick = () => speak(aud);
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        function openSettings() { document.getElementById('settings-modal').classList.add('open'); }
+        function setTheme(m) {
+            document.querySelectorAll('.radio-option i').forEach(i => i.style.display = 'none');
+            document.querySelector(`#theme-${m} i`).style.display = 'block';
+            document.querySelectorAll('.radio-option').forEach(r => r.classList.remove('selected'));
+            document.getElementById(`theme-${m}`).classList.add('selected');
+            if(m==='dark') document.body.classList.add('dark-mode'); else document.body.classList.remove('dark-mode');
+        }
+    </script>
+</body>
+</html>
